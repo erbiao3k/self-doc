@@ -149,7 +149,7 @@ kubectl apply -f test-app-nginx.yaml -n test
 ![](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/o_210218072741nginx-demo-page.png)
 
 请求流程：客户端解析域名`erbiao.com`得到边缘节点IP，然后向节点上的`Ingress Controller`发送http请求。依据Ingress对象里的描述匹配域名，找到对应的service对象，获取关联的endpoint列表，最后将客户端请求转发给其中某个pod。
-![](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/o_210218074344ingress-controller-workflow.png)
+![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/pic/ingress-process.png)
 
 在ingress-nginx-controller的pod的nginx.conf配置中，生成了nginx配置段
 ```
