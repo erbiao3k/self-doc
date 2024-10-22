@@ -316,7 +316,7 @@ spec:
           servicePort: 3000
 ```
 部署，解析域名后就可正常访问到。
-![](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/o_210220032338ingress-nginx-url-rewrite-1.png)
+![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/pic/6677.png)
 
 现在针对URL路径做一个rewrite：在URI中添加一个app的前缀。做法就是在**annotations**中添加**rewrite-target**的注解。
 ```
@@ -343,9 +343,9 @@ spec:
 
 更新后再访问就需要加上/app这个URI了
 
-![image](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/t_210220033925ingress-nginx-url-rewrite-2.png)
+![image](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/pic/8888.png)
 
-![](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/t_210220034258ingress-nginx-url-rewrite-3.png)
+![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/pic/404nf.png)
 
 可看到静态资源在/stylesheets路径下，做了URL Rewrite后，要正常访问那也需要加上前缀`http://erbiao.me/app/stylesheets/screen.css`。对于图片或者其他静态资源也是如此，当然去更改页面引入静态资源的方式为相对路径也是可以的，但毕竟要修改代码，此时可借助`ingress-nginx` 中的**configuration-snippet**来对静态资源做一次跳转。
 ```
