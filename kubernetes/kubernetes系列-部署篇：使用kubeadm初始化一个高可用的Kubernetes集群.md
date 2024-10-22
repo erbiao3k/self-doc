@@ -112,7 +112,7 @@ exit  #配置完成后重启终端
 192.168.1.124 k8s-node5
 ```
 #### 部署架构图
-![](https://images.cnblogs.com/cnblogs_com/erbiao/1918053/o_210214061857K8S%E9%AB%98%E5%8F%AF%E7%94%A8%E6%9E%B6%E6%9E%84%E5%9B%BE.png)
+![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/arch.png?raw=true)
 
 **说明**：
 
@@ -209,7 +209,7 @@ make etcdadm
 mv ./etcdadm /usr/bin/etcdadm 
 ```
 编译过程中若出现“fatal: git fetch-pack: expected shallow list”错误，可能是golang或git版本过低。建议升级golang或将git版本升级到2.x。
-centos升级git到2.x：[地址](https://www.cnblogs.com/erbiao/p/14398000.html)
+centos升级git到2.x：[地址](https://github.com/erbiao3k/self-doc/blob/master/Linux/centos%E5%8D%87%E7%BA%A7git%E5%88%B02.x.md)
 
 **在k8s-master1启动etcd服务(etcd1)**
 
