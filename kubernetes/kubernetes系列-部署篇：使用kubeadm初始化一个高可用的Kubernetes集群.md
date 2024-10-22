@@ -112,7 +112,7 @@ exit  #配置完成后重启终端
 192.168.1.124 k8s-node5
 ```
 #### 部署架构图
-![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/arch.png?raw=true)
+![](https://github.com/erbiao3k/self-doc/blob/master/kubernetes/pic/arch.png?raw=true)
 
 **说明**：
 
