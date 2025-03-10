@@ -1,0 +1,252 @@
+pipeline {
+    agent any
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '2'))
+    }
+    environment {
+        NODE_HOME = '/app/node-v16.17.0-linux-x64'
+        JAVA_HOME = '/app/jdk1.8.0_341'
+        MAVEN_HOME = '/app/apache-maven-3.8.6'
+        PATH = "${NODE_HOME}/bin:${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
+    }
+
+    parameters {
+        gitParameter branchFilter: 'origin/(.*)', name: 'branch', type: 'PT_BRANCH', defaultValue: 'test', description: '默认分支为 test'
+        booleanParam(name: 'sg_oms', defaultValue: true)
+        booleanParam(name: 'sg_wms', defaultValue: true)
+        booleanParam(name: 'sg_wms_system', defaultValue: true)
+        booleanParam(name: 'sg_oms_system', defaultValue: true)
+        booleanParam(name: 'sg_wms_mq', defaultValue: true)
+        booleanParam(name: 'sg_oms_mq', defaultValue: true)
+        booleanParam(name: 'sg_export_mq', defaultValue: true)
+        booleanParam(name: 'sg_wms_ui', defaultValue: true)
+        booleanParam(name: 'sg_api', defaultValue: true)
+        booleanParam(name: 'sg_oms_ui', defaultValue: true)
+        booleanParam(name: 'sg_job', defaultValue: false)
+        booleanParam(name: 'sg_file', defaultValue: false)
+        booleanParam(name: 'sg_auth', defaultValue: false)
+        booleanParam(name: 'sg_gateway', defaultValue: false)
+    }
+
+    stages {
+        stage('检查参数') {
+            steps {
+                script {
+                    def anyBuild = params.sg_oms || params.sg_wms || params.sg_wms_system || params.sg_oms_system ||
+                                    params.sg_wms_mq || params.sg_oms_mq || params.sg_export_mq || params.sg_wms_ui ||
+                                    params.sg_api || params.sg_oms_ui || params.sg_job || params.sg_file ||
+                                    params.sg_auth || params.sg_gateway
+
+                    if (!anyBuild) {
+                        error("未选择任何需要构建的项目，请至少启用一个布尔值参数。")
+                    }
+                }
+            }
+        }
+
+        stage('拉取代码') {
+            steps {
+                script {
+                    git branch: "${params.branch}", 
+                        credentialsId: 'gitpull', 
+                        url: 'git@code.sg-n1.com:prod/sg.git'
+                }
+            }
+        }
+
+        stage('并发构建') {
+            steps {
+                script {
+                    def buildTasks = [:]
+
+                    buildTasks['Java 构建'] = {
+                        script {
+                            def projectsToBuild = []
+
+                            if (params.sg_oms) projectsToBuild.add('sg-oms-system')
+                            if (params.sg_wms) projectsToBuild.add('sg-wms')
+                            if (params.sg_wms_system) projectsToBuild.add('sg-wms-system')
+                            if (params.sg_oms_system) projectsToBuild.add('sg-system')
+                            if (params.sg_wms_mq) projectsToBuild.add('sg-wms-mq-consumer')
+                            if (params.sg_oms_mq) projectsToBuild.add('sg-oms-mq-consumer')
+                            if (params.sg_export_mq) projectsToBuild.add('sg-export-mq-consumer')
+                            if (params.sg_api) projectsToBuild.add('sg-api-provider')
+                            if (params.sg_job) projectsToBuild.add('sg-job')
+                            if (params.sg_file) projectsToBuild.add('sg-file')
+                            if (params.sg_auth) projectsToBuild.add('sg-auth')
+                            if (params.sg_gateway) projectsToBuild.add('sg-gateway')
+
+                            if (projectsToBuild) {
+                                dir('sg') {
+                                    sh "mvn clean package -Dmaven.test.skip=true -pl :${projectsToBuild.join(',:')} -am -T 5"
+                                }
+                            }
+                        }
+                    }
+
+                    buildTasks['NodeJS 构建'] = {
+                        script {
+                            def nodeBuildTasks = [:]
+
+                            if (params.sg_wms_ui) {
+                                nodeBuildTasks['sg-wms-ui 构建'] = {
+                                    script {
+                                        dir('sg-wms-ui') {
+                                            sh 'cnpm i'
+                                            sh 'cnpm install core-js'
+                                            sh 'cnpm install --save js-base64 webpack-merge'
+                                            sh 'npm run build:stage'
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (params.sg_oms_ui) {
+                                nodeBuildTasks['sg-oms-ui 构建'] = {
+                                    script {
+                                        dir('sg-ui') {
+                                            sh 'cnpm i'
+                                            sh 'cnpm install core-js'
+                                            sh 'cnpm install --save js-base64'
+                                            sh 'npm run build:stage'
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!nodeBuildTasks.isEmpty()) {
+                                parallel nodeBuildTasks
+                            }
+                        }
+                    }
+
+                    parallel buildTasks
+                }
+            }
+        }
+
+        stage('部署服务') {
+            steps {
+                script {
+                    def deployTasks = [:]
+
+                    deployTasks['JAR 文件部署'] = {
+                        script {
+                            def deployPath = "/path/to/${params.branch}/"
+                            def projectDirs = [
+                                'sg_oms': 'sg/sg-oms/sg-oms-system',
+                                'sg_wms': 'sg/sg-wms-modules/sg-wms',
+                                'sg_wms_system': 'sg/sg-modules/sg-wms-system',
+                                'sg_oms_system': 'sg/sg-modules/sg-system',
+                                'sg_wms_mq': 'sg/sg-wms-modules/sg-wms-mq-consumer',
+                                'sg_oms_mq': 'sg/sg-oms/sg-oms-mq-consumer',
+                                'sg_export_mq': 'sg/sg-wms-modules/sg-export-mq-consumer',
+                                'sg_api': 'sg/sg-api/sg-api-provider',
+                                'sg_job': 'sg/sg-modules/sg-job',
+                                'sg_file': 'sg/sg-modules/sg-file',
+                                'sg_auth': 'sg/sg-auth',
+                                'sg_gateway': 'sg/sg-gateway'
+                            ]
+
+                            projectDirs.each { param, dir ->
+                                if (params."${param}") {
+                                    def jarFiles = findFiles(glob: "${dir}/target/*.jar")
+                                    if (jarFiles) {
+                                        sh "scp ${dir}/target/*.jar jenkins@testserver.local:/sgdata/${dir}/target/"
+                                    } else {
+                                        echo "警告: ${dir}/target/ 目录下没有找到 JAR 文件，跳过部署。"
+                                        error("部署失败")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    deployTasks['NodeJS 构建产物部署'] = {
+                        script {
+                            def nodeProjects = [
+                                'sg_wms_ui': 'sg-wms-ui',
+                                'sg_oms_ui': 'sg-ui'
+                            ]
+
+                            nodeProjects.each { param, dir ->
+                                if (params."${param}") {
+                                    def distFiles = findFiles(glob: "${dir}/dist/**")
+                                    if (distFiles) {
+                                        sh "scp -r ${dir}/dist/* jenkins@testserver.local:/sgdata/${dir}/dist/"
+                                    } else {
+                                        echo "警告: ${dir}/dist/ 目录下没有找到构建产物，跳过部署。"
+                                        error("部署失败")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    parallel deployTasks
+                }
+            }
+        }
+
+        stage('重启服务') {
+            steps {
+                script {
+                    def serviceMap = [
+                        'sg_oms': 'sg-stack-sys_sg-oms',
+                        'sg_wms': 'sg-stack-sys_sg-wms',
+                        'sg_wms_system': 'sg-stack-usr_sg-wms-system',
+                        'sg_oms_system': 'sg-stack-usr_sg-oms-system',
+                        'sg_wms_mq': 'sg-stack-sys_sg-wms-mq-consumer',
+                        'sg_oms_mq': 'sg-stack-sys_sg-oms-mq-consumer',
+                        'sg_export_mq': 'sg-stack-sys_sg-export-mq-consumer',
+                        'sg_api': 'sg-stack-sys_sg-api',
+                        'sg_job': 'sg-stack-gw_sg-job',
+                        'sg_file': 'sg-stack-gw_sg-file',
+                        'sg_auth': 'sg-stack-gw_sg-auth',
+                        'sg_gateway': 'sg-stack-gw_sg-gateway'
+                    ]
+
+                    serviceMap.each { param, serviceName ->
+                        if (params."${param}") {
+                            switch (serviceName) {
+                                case 'sg-stack-sys_sg-wms-mq-consumer':
+                                case 'sg-stack-sys_sg-export-mq-consumer':
+                                case 'sg-stack-sys_sg-api':
+                                case 'sg-stack-sys_sg-oms':
+                                case 'sg-stack-sys_sg-oms-mq-consumer':
+                                case 'sg-stack-sys_sg-wms':
+                                    sh "docker service rm ${serviceName}"
+                                    sh "ssh jenkins@testserver.local 'docker stack deploy -c /sgdata/docker-stack/dc-stack-sys.yml sg-stack-sys'"
+                                    break
+                                case 'sg-stack-gw_sg-file':
+                                case 'sg-stack-gw_sg-job':
+                                case 'sg-stack-gw_sg-gateway':
+                                case 'sg-stack-gw_sg-auth':
+                                    sh "docker service rm ${serviceName}"
+                                    sh "ssh jenkins@testserver.local 'docker stack deploy -c /sgdata/docker-stack/dc-stack-gw.yml sg-stack-gw'"
+                                    break
+                                case 'sg-stack-usr_sg-wms-system':
+                                case 'sg-stack-usr_sg-oms-system':
+                                    sh "docker service rm ${serviceName}"
+                                    sh "ssh jenkins@testserver.local 'docker stack deploy -c /sgdata/docker-stack/dc-stack-user.yml sg-stack-usr'"
+                                    break
+                                default:
+                                    echo "未知的服务: ${serviceName}, 跳过重启。"
+                                    error("重启服务失败")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline 执行成功！'
+        }
+        failure {
+            echo 'Pipeline 执行失败！'
+        }
+    }
+}
