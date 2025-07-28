@@ -144,3 +144,13 @@ grep processor /proc/cpuinfo |wc -l
 ```
 rm -rvf /tmp/strace_* && nohup ps -ef | grep  php-fpm | awk '{print " -p " $2" -s 10000 -o /tmp/strace_"$2".log"}' | xargs strace &
 ```
+#### 将内网服务器端口反向绑定到具备公网IP的服务器
+```
+# /etc/ssh/sshd_config文件中确保：GatewayPorts clientspecified
+# 新建账户专用，禁止使用root
+ssh -o ServerAliveInterval=20 \
+    -o ServerAliveCountMax=5 \
+    -o ExitOnForwardFailure=yes \
+    -o TCPKeepAlive=yes \
+    -f -N -R 0.0.0.0:18888:192.168.1.248:6666 tunn@77.44.33.22
+```
